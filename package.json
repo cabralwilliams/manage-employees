@@ -1,0 +1,27 @@
+{
+  "name": "manage-employees",
+  "version": "1.0.0",
+  "description": "An application that allows a user to manage various employee data.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cabralwilliams/manage-employees.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/cabralwilliams/manage-employees/issues"
+  },
+  "homepage": "https://github.com/cabralwilliams/manage-employees#readme",
+  "dependencies": {
+    "console.table": "^0.10.0",
+    "dotenv": "^10.0.0",
+    "inquirer": "^8.2.0",
+    "mysql2": "^2.3.2"
+  }
+}
