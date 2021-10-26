@@ -45,3 +45,5 @@ const qNumber = (name,message) => {
     };
     return output;
 };
+
+module.exports = { qInput, qList, qNumber };
