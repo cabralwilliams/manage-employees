@@ -29,14 +29,14 @@ const qList = (name,message,choices) => {
     return output;
 };
 
-const qNumber = (name,message) => {
+const qNumber = (name,message,invalidMssg) => {
     const output = {
         type: "number",
         name: name,
         message: message,
         validate: function(inputVal) {
             if(!inputVal || typeof inputVal !== "number" || inputVal <= 0 || Math.floor(inputVal) !== inputVal) {
-                console.log(`The ${name} must be a positive integer value.`);
+                console.log(invalidMssg);
                 return false;
             } else {
                 return true;
@@ -46,4 +46,14 @@ const qNumber = (name,message) => {
     return output;
 };
 
-module.exports = { qInput, qList, qNumber };
+const qConfirm = (name,message,defaultVal = true) => {
+    const output = {
+        type: "confirm",
+        name: name,
+        message: message,
+        default: defaultVal
+    };
+    return output;
+};
+
+module.exports = { qInput, qList, qNumber, qConfirm };
