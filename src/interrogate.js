@@ -4,7 +4,7 @@ const inquirer = require('inquirer');
 const cTable = require('console.table');
 const db = require('./connection');
 
-const mainMenu = ["View all Departments","View all Roles","View all Employees","Add Department","Add Role","Add Employee","Update Employee Role","Exit Program"];
+const mainMenu = ["View all Departments","View all Roles","View all Employees","Add Department","Add Role","Add Employee","Update Employee Role","Update Employee Manager","Exit Program"];
 
 const whatToDo = qList("employee_action","\nWelcome to the Employee Manager!\nChoose an action from the list below.\n",mainMenu);
 const backToStart = qConfirm("back_to_start","\nDo you wish to perform another action?  (Y for yes, N to quit)",true);
@@ -289,6 +289,130 @@ function updateRole() {
     });
 }
 
+function updateManager() {
+    let emp_array; //Will store employees as { id, full_name, manager_full_name }
+    let emp_list; //Shows the employee list options
+    let emp_id; //The id of the selected employee
+    let emp_name; //Full name of the employee
+    let manage_id; //Stores the manager id
+
+    //Drop and recreate managers table
+    db.promise().query(dropManagersTable)
+    .then(() => {
+        //Create managers table
+        db.promise().query(populateManagers)
+        .then(() => {
+            //Get employees array and display list of employees with current manager
+            db.promise().query(`SELECT employee.id, CONCAT(employee.first_name, ' ', employee.last_name) AS 'Employee Name', CONCAT(managers.first_name, ' ', managers.last_name) AS 'Current Manager'
+            FROM employee
+            LEFT JOIN managers ON employee.manager_id = managers.id`)
+            .then(([rows,fields]) => {
+                emp_array = rows;
+                emp_list = emp_array.map(listOb => `${listOb.id}. ${listOb['Employee Name']}`);
+                //console.log(emp_array);
+                //process.exit();
+
+                //Show the list of employees and current managers
+                console.log(cTable.getTable(emp_array));
+
+                //Use inquirer to choose an employee whose manager should change
+                inquirer.prompt([
+                    qList('selEmployee','Select the employee whose manager you wish to update.',emp_list)
+                ])
+                .then(selected => {
+                    let split_select = selected.selEmployee.split(".");
+                    emp_id = parseInt(split_select[0]);
+                    emp_name = split_select[1].trim();
+
+                    //Create the manager selection list excluding the selected employee
+                    let managerChoices = emp_list.filter(nextEmp => parseInt(nextEmp.split(".")[0]) !== emp_id);
+
+                    //console.log(managerChoices);
+                    //process.exit();
+
+                    //Push Leave Current Manager option
+                    managerChoices.push("Leave Current Manager","Set Manager to None");
+
+                    //Use inquirer to choose new manager
+                    inquirer.prompt([
+                        qList("newManager",`Select the new manager for ${emp_name} from the list below.`,managerChoices)
+                    ])
+                    .then(nextOb => {
+                        if(nextOb.newManager === "Leave Current Manager") {
+                            //Inquire about another action or quit
+                            inquirer.prompt([
+                                backToStart
+                            ])
+                            .then(doMore => {
+                                if(doMore.back_to_start) {
+                                    runProgram();
+                                } else {
+                                    console.log('\nHave a nice day!');
+                                    process.exit();
+                                }
+                            });
+                        } else if(nextOb.newManager === "Set Manager to None") {
+                            //Run the query to set manager to null
+                            db.promise().query(`UPDATE employee SET employee.manager_id = NULL WHERE employee.id = ?`,emp_id)
+                            .then(() => {
+                                console.log(`${emp_name}'s manager was successfully set to none/null.`);
+                                //Inquire about another action or quit
+                                inquirer.prompt([
+                                    backToStart
+                                ])
+                                .then(doMore => {
+                                    if(doMore.back_to_start) {
+                                        runProgram();
+                                    } else {
+                                        console.log('\nHave a nice day!');
+                                        process.exit();
+                                    }
+                                });
+                            })
+                            .catch(err => {
+                                console.log(err);
+                            });
+                        } else {
+                            //Run the query to set manager to new value based on id
+                            let nextArr = nextOb.newManager.split(".");
+                            manage_id = parseInt(nextArr[0]);
+                            let newManagerName = nextArr[1].trim();
+                            db.promise().query(`UPDATE employee SET employee.manager_id = ? WHERE employee.id = ?`,[manage_id,emp_id])
+                            .then(() => {
+                                console.log(`${emp_name}'s manager was successfully set to ${newManagerName}.`);
+                                //Inquire about another action or quit
+                                inquirer.prompt([
+                                    backToStart
+                                ])
+                                .then(doMore => {
+                                    if(doMore.back_to_start) {
+                                        runProgram();
+                                    } else {
+                                        console.log('\nHave a nice day!');
+                                        process.exit();
+                                    }
+                                });
+                            })
+                            .catch(err => {
+                                console.log(err);
+                            });
+                        }
+                    })
+                })
+            })
+            .catch(err => {
+                console.log(err);
+            });
+        })
+        .catch(err => {
+            console.log(err);
+        });
+    })
+    .catch(err => {
+        console.log(err);
+    });
+}
+
 const runProgram = () => {
     inquirer.prompt(
         [whatToDo]
@@ -447,6 +571,9 @@ const runProgram = () => {
                 break;
             case "Update Employee Role":
                 updateRole();
+                break;
+            case "Update Employee Manager":
+                updateManager();
                 break;
             case "Exit Program":
                 console.log('\nHave a nice day!');
