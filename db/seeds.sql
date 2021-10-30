@@ -53,3 +53,21 @@ SELECT employee.id, employee.first_name, employee.last_name, role.title AS title
     FROM employee
     LEFT JOIN role ON employee.role_id = role.id
     LEFT JOIN department ON role.department_id = department.id;
+
+DROP TABLE IF EXISTS managers;
+
+CREATE TABLE managers (
+    id INTEGER AUTO_INCREMENT PRIMARY KEY,
+    first_name VARCHAR(30),
+    last_name VARCHAR(30)
+) SELECT employee.first_name, employee.last_name FROM employee;
+
+SELECT * FROM managers;
+
+SELECT employee.id, CONCAT(employee.first_name, ' ', employee.last_name) AS 'Employee Name', role.title AS Title, department.name AS Department, role.salary AS Salary, CONCAT(managers.first_name, ' ', managers.last_name) AS Manager
+    FROM employee
+    LEFT JOIN role ON employee.role_id = role.id
+    LEFT JOIN department ON role.department_id = department.id
+    LEFT JOIN managers ON employee.manager_id = managers.id;
+
+DROP TABLE managers;
