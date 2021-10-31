@@ -59,8 +59,9 @@ DROP TABLE IF EXISTS managers;
 CREATE TABLE managers (
     id INTEGER AUTO_INCREMENT PRIMARY KEY,
     first_name VARCHAR(30),
-    last_name VARCHAR(30)
-) SELECT employee.first_name, employee.last_name FROM employee;
+    last_name VARCHAR(30),
+    employee_id INTEGER
+) SELECT employee.first_name, employee.last_name, employee.id AS employee_id FROM employee;
 
 SELECT * FROM managers;
 

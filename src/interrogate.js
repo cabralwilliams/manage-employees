@@ -4,7 +4,7 @@ const inquirer = require('inquirer');
 const cTable = require('console.table');
 const db = require('./connection');
 
-const mainMenu = ["View all Departments","View all Roles","View all Employees","Add Department","Add Role","Add Employee","Update Employee Role","Update Employee Manager","Exit Program"];
+const mainMenu = ["View all Departments","View all Roles","View all Employees","Add Department","Add Role","Add Employee","Update Employee Role","Update Employee Manager","See Employees by Manager","Exit Program"];
 
 const whatToDo = qList("employee_action","\nWelcome to the Employee Manager!\nChoose an action from the list below.\n",mainMenu);
 const backToStart = qConfirm("back_to_start","\nDo you wish to perform another action?  (Y for yes, N to quit)",true);
@@ -78,15 +78,16 @@ const dropManagersTable = `DROP TABLE IF EXISTS managers`;
 const populateManagers = `CREATE TABLE managers (
     id INTEGER AUTO_INCREMENT PRIMARY KEY,
     first_name VARCHAR(30),
-    last_name VARCHAR(30)
-) SELECT employee.first_name, employee.last_name FROM employee`;
+    last_name VARCHAR(30),
+    employee_id INTEGER
+) SELECT employee.first_name, employee.last_name, employee.id AS employee_id FROM employee`;
 
 //Displays all employees with employee id, full name role, department, salary, and manager full name
 const identifyManagers = `SELECT employee.id, CONCAT(employee.first_name, ' ', employee.last_name) AS 'Employee Name', role.title AS Title, department.name AS Department, role.salary AS Salary, CONCAT(managers.first_name, ' ', managers.last_name) AS Manager
 FROM employee
 LEFT JOIN role ON employee.role_id = role.id
 LEFT JOIN department ON role.department_id = department.id
-LEFT JOIN managers ON employee.manager_id = managers.id`;
+LEFT JOIN managers ON employee.manager_id = managers.employee_id`;
 
 
 //List of reconfigured questions
@@ -413,6 +414,86 @@ function updateManager() {
     });
 }
 
+function employeesByManager() {
+    let manager_list;
+    let man_id_list;
+
+    //Drop and recreate managers table
+    db.promise().query(dropManagersTable)
+    .then(() => {
+        //Add managers table back
+        db.promise().query(populateManagers)
+        .then(([rows,fields]) => {
+            //Select manager_id from employees and filter out the null values
+            db.promise().query('SELECT employee.manager_id FROM employee')
+            .then(([rows,fields]) => {
+                //Convert returned object array to array of numbers
+                man_id_list = rows.map(row => row.manager_id).filter(idVal => idVal !== null);
+
+                //Only get unique values for manager ids
+                man_id_list = [...new Set(man_id_list)];
+
+                //Run query to only get employees who have been assigned as managers
+                db.promise().query(`SELECT * FROM managers WHERE managers.employee_id IN (${man_id_list.join(",")})`)
+                .then(([rows,fields]) => {
+                    //Turn the list into a selectable array
+                    manager_list = rows.map(row => `${row.id}. ${row.first_name} ${row.last_name}`);
+                    
+                    //Inquire about which manager is wanted
+                    inquirer.prompt([
+                        qList("which_manager","Select a manager from the list below to see that manager's employees.",manager_list)
+                    ])
+                    .then(theManager => {
+                        let managerArray = theManager.which_manager.split(".");
+                        //Get manager name and id for further use
+                        let managerId = parseInt(managerArray[0]);
+                        let managerName = managerArray[1].trim();
+
+                        console.log(`Below are all employees who report to ${managerName}.\n`);
+                        //Retrieve the employees in question
+                        db.promise().query(`SELECT CONCAT(employee.first_name, ' ', employee.last_name) AS 'Employees Reporting to ${managerName}' FROM employee WHERE employee.manager_id = ?`,managerId)
+                        .then(([rows,fields]) => {
+                            //console.log(fields);
+                            console.log(cTable.getTable(rows));
+                            //Inquire about another action or quit
+                            inquirer.prompt([
+                                backToStart
+                            ])
+                            .then(doMore => {
+                                if(doMore.back_to_start) {
+                                    runProgram();
+                                } else {
+                                    console.log('\nHave a nice day!');
+                                    process.exit();
+                                }
+                            });
+                        })
+                        .catch(err => {
+                            console.log(err);
+                        });
+                    });
+                })
+                .catch(err => {
+                    console.log(err);
+                });
+            })
+            .catch(err => {
+                console.log(err);
+            });
+        })
+        .catch(err => {
+            console.log(err);
+        });
+    })
+    .catch(err => {
+        console.log(err);
+    });
+}
+
+function employeesByDepartment() {
+    
+}
+
 const runProgram = () => {
     inquirer.prompt(
         [whatToDo]
@@ -574,6 +655,9 @@ const runProgram = () => {
                 break;
             case "Update Employee Manager":
                 updateManager();
+                break;
+            case "See Employees by Manager":
+                employeesByManager();
                 break;
             case "Exit Program":
                 console.log('\nHave a nice day!');
