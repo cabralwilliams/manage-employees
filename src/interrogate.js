@@ -4,7 +4,7 @@ const inquirer = require('inquirer');
 const cTable = require('console.table');
 const db = require('./connection');
 
-const mainMenu = ["View all Departments","View all Roles","View all Employees","Add Department","Add Role","Add Employee","Update Employee Role","Update Employee Manager","See Employees by Manager","Exit Program"];
+const mainMenu = ["View all Departments","View all Roles","View all Employees","Add Department","Add Role","Add Employee","Update Employee Role","Update Employee Manager","See Employees by Manager","See Employees by Department","Exit Program"];
 
 const whatToDo = qList("employee_action","\nWelcome to the Employee Manager!\nChoose an action from the list below.\n",mainMenu);
 const backToStart = qConfirm("back_to_start","\nDo you wish to perform another action?  (Y for yes, N to quit)",true);
@@ -491,7 +491,91 @@ function employeesByManager() {
 }
 
 function employeesByDepartment() {
-    
+    let departmentList; //Will hold an array of objects with a department_id = integer, role_ids = array of integers
+    let departmentChoices; //Will hold the list of department choices for inquirer
+
+    //Query the roles table - create array with containing all department ids - eliminate repeats by creating set - loop through roles to get role_ids associated with specific departments
+    db.promise().query(`SELECT * from role`)
+    .then(([rows,fields]) => {
+        
+        let depArr = [];
+        for(let i = 0; i < rows.length; i++) {
+            depArr.push(rows[i].department_id);
+        }
+        depArr = [...new Set(depArr)];
+
+        //Create the array of objects
+        departmentList = depArr.map(depNumber => {
+            return { dep_id: depNumber, role_ids: [] };
+        });
+
+        //Populate role_ids arrays
+        for(let i = 0; i < rows.length; i++) {
+            for(let j = 0; j < departmentList.length; j++) {
+                if(rows[i].department_id === departmentList[j].dep_id) {
+                    departmentList[j].role_ids.push(rows[i].id);
+                    break;
+                }
+            }
+        }
+        
+        //Query the departments to form the choices array
+        db.promise().query(`SELECT * FROM department`)
+        .then(([rows,fields]) => {
+            
+            //Choice Array
+            departmentChoices = rows.map(dChoice => `${dChoice.id}. ${dChoice.name}`);
+            
+            //Inquire about department
+            inquirer.prompt([
+                qList("dep_chosen","Choose a department from the list below to see its employees.",departmentChoices)
+            ])
+            .then(depChoice => {
+                let depId, depName;
+                let depArray = depChoice.dep_chosen.split(".");
+                depId = parseInt(depArray[0]);
+                depName = depArray[1].trim();
+
+                let depOb = departmentList.filter(dep => dep.dep_id === depId)[0];
+                console.log(`\nBelow is a list of all of the employees in the ${depName} department.\n`);
+
+                //Query the employee table to get only those employees whose role_id is in the array of role_ids for the department in question
+                db.promise().query(`SELECT CONCAT(employee.first_name, ' ', employee.last_name) AS 'Employee Name', role.title AS Title
+                FROM employee
+                LEFT JOIN role ON employee.role_id = role.id WHERE role.id IN (${depOb.role_ids.join(",")})`)
+                .then(([rows,fields]) => {
+                    console.log(cTable.getTable(rows));
+                    //Inquire about another action or quit
+                    inquirer.prompt([
+                        backToStart
+                    ])
+                    .then(doMore => {
+                        if(doMore.back_to_start) {
+                            runProgram();
+                        } else {
+                            console.log('\nHave a nice day!');
+                            process.exit();
+                        }
+                    });
+                })
+                .catch(err => {
+                    if(err) {
+                        console.log(err);
+                    }
+                });
+            });
+        })
+        .catch(err => {
+            if(err) {
+                console.log(err);
+            }
+        });
+    })
+    .catch(err => {
+        if(err) {
+            console.log(err);
+        }
+    });
 }
 
 const runProgram = () => {
@@ -658,6 +742,9 @@ const runProgram = () => {
                 break;
             case "See Employees by Manager":
                 employeesByManager();
+                break;
+            case "See Employees by Department":
+                employeesByDepartment();
                 break;
             case "Exit Program":
                 console.log('\nHave a nice day!');
