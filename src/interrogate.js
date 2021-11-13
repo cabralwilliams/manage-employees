@@ -4,7 +4,7 @@ const inquirer = require('inquirer');
 const cTable = require('console.table');
 const db = require('./connection');
 
-const mainMenu = ["View all Departments","View all Roles","View all Employees","Add Department","Add Role","Add Employee","Update Employee Role","Update Employee Manager","See Employees by Manager","See Employees by Department","Exit Program"];
+const mainMenu = ["View all Departments","View all Roles","View all Employees","Add Department","Add Role","Add Employee","Update Employee Role","Update Employee Manager","See Employees by Manager","See Employees by Department","See Department Budget","Dismiss Employee","Eliminate Role","Exit Program"];
 
 const whatToDo = qList("employee_action","\nWelcome to the Employee Manager!\nChoose an action from the list below.\n",mainMenu);
 const backToStart = qConfirm("back_to_start","\nDo you wish to perform another action?  (Y for yes, N to quit)",true);
@@ -20,8 +20,16 @@ const emp_man_id = { type: "number", name: "emp_man_id", message: "Please input 
 
 //Inquirer question arrays
 const depQs = [dep_name];
-const roleQs = [role_name,role_dep_id,role_salary];
+const roleQs = [role_name,role_dep_id,role_salary]; //Need to redo such that second question is a list question containing 
 const empQs = [emp_fn,emp_ln,emp_rol_id,emp_man_id];
+
+//New role questions
+const newRoleQs = roleStrings => {
+    let output = [role_name];
+    const depQ = qList("role_dep_id","Please select an option for the department to which this role will belong.",roleStrings);
+    output.push(depQ, role_salary);
+    return output;
+};
 
 //Query List
 const queryDepartments = `SELECT department.name, department.id AS 'department id' FROM department`;
@@ -113,47 +121,88 @@ const assignRole = (roles) => {
     };
 };
 
+function addNewRole() {
+    let departments;
+    //Get an array of the departments so that the role questions can be asked
+    db.promise().query(queryDepartments)
+    .then(([rows,fields]) => {
+        //Returned row { name, department id }
+        
+        departments = rows.map(row => {
+            return `${row["department id"]}. ${row.name}`;
+        });
+        db.promise().query(queryRoles)
+        .then(([rows,fields]) => {
+            console.log(cTable.getTable(rows));
+            console.log(`Above is the list of current roles.\n`);
+
+            //Inquire the add role questions
+            inquirer.prompt(
+                newRoleQs(departments)
+            )
+            .then(roleOb => {
+                const depId = parseInt(roleOb.role_dep_id.split(".")[0]);
+                const roleParams = [roleOb.role_name,depId,roleOb.role_salary];
+                let roleName = roleParams[0];
+                
+                //Add the role
+                db.promise().query(addRoleQuery,roleParams)
+                .then(([rows,fields]) => {
+                    console.log(`\nThe role '${roleName}' has been added.`);
+                    inquirer.prompt([backToStart])
+                    .then(userChoice => {
+                        if(userChoice.back_to_start) {
+                            runProgram();
+                        } else {
+                            console.log('\nHave a nice day!');
+                            process.exit();
+                        }
+                    })
+                    .catch(err => {
+                        console.log(err);
+                    });
+                })
+                .catch(err => {
+                    console.log(err);
+                });
+            })
+            .catch(err => {
+                console.log(err);
+            });
+        })
+        .catch(err => {
+            console.log(err);
+        });
+    })
+    .catch(err => {
+        console.log(err);
+    });
+}
+
 function addNewEmployee() {
     let managersArr, rolesArr;
-    db.query(dropManagersTable, (err, result) => {
-        if(err) {
-            console.log(err);
-        }
-    });
-    db.query(
-        `${populateManagers}`, (err, mRows) => {
-            //The above query creates a temporary managers table from which the list will be created for choosing the employee's manager
-            if(err) {
-                console.log(err);
-            }
-            db.query(`SELECT * FROM managers`, (err, mRows2) => {
-                if(err) {
-                    console.log(err);
-                }
-                managersArr = mRows2;
-                db.query(`SELECT role.id, role.title FROM role`, (err, rRows) => {
-                    //The above query will produce an array of roles
-                    if(err) {
-                        console.log(err);
-                    }
-                    rolesArr = rRows;
-                    //console.log(managersArr);
-                    //console.log(rolesArr);
-
+    db.promise().query(dropManagersTable)
+    .then(() => {
+        db.promise().query(populateManagers)
+        .then(() => {
+            db.promise().query(`SELECT * FROM managers`)
+            .then(([rows,fields]) => {
+                //Get the managers from the temporary managers table
+                managersArr = rows;
+                db.promise().query(`SELECT role.id, role.title FROM role`)
+                .then(([rows,fields]) => {
+                    rolesArr = rows;
                     //Show current list of employees
-                    db.query(identifyManagers, (err, empTab) => {
-                        if(err) {
-                            console.log(err);
-                        }
-                        //Show emploee table but with manager names instead of manager ids
-                        console.log(cTable.getTable(empTab));
+                    db.promise().query(identifyManagers)
+                    .then(([rows,fields]) => {
+                        console.log(cTable.getTable(rows));
 
                         //Create arrays to handle role choices and manager choices
                         let roleChoices = rolesArr.map(roleOb => {
                             return `${roleOb.id}. ${roleOb.title}`;
                         });
                         let managerChoices = managersArr.map(managerOb => {
-                            return `${managerOb.id}. ${managerOb.first_name} ${managerOb.last_name}`;
+                            return `${managerOb.employee_id}. ${managerOb.first_name} ${managerOb.last_name}`;
                         });
                         managerChoices.push("None");
 
@@ -177,23 +226,53 @@ function addNewEmployee() {
                                     console.log(err);
                                 }
                                 console.log(`\n${emp_data.emp_fn} ${emp_data.emp_ln} was added successfully!\n`);
+                                //Drop the managers table
+                                db.promise().query(dropManagersTable)
+                                .then(() => {
+                                    //Drop the managers table
+                                    db.promise().query(dropManagersTable)
+                                    .then(() => {
 
-                                //Ask if the user wants to perform another action or quit.
-                                inquirer.prompt([backToStart])
-                                .then(userChoice => {
-                                    if(userChoice.back_to_start) {
-                                        runProgram();
-                                    } else {
-                                        process.exit();
-                                    }
+                                        //Ask if the user wants to perform another action or quit.
+                                        inquirer.prompt([backToStart])
+                                        .then(userChoice => {
+                                            if(userChoice.back_to_start) {
+                                                runProgram();
+                                            } else {
+                                                console.log('\nHave a nice day!');
+                                                process.exit();
+                                            }
+                                        });
+                                    })
+                                    .catch(err => {
+                                        console.log(err);
+                                    });
+                                })
+                                .catch(err => {
+                                    console.log(err);
                                 });
                             });
                         });
+                    })
+                    .catch(err => {
+                        console.log(err);
                     });
+                })
+                .catch(err => {
+                    console.log(err);
                 });
+            })
+            .catch(err => {
+                console.log(err);
             });
-        }
-    );
+        })
+        .catch(err => {
+            console.log(err);
+        });
+    })
+    .catch(err => {
+        console.log(err);
+    });
 };
 
 //Role update section
@@ -381,17 +460,22 @@ function updateManager() {
                             db.promise().query(`UPDATE employee SET employee.manager_id = ? WHERE employee.id = ?`,[manage_id,emp_id])
                             .then(() => {
                                 console.log(`${emp_name}'s manager was successfully set to ${newManagerName}.`);
-                                //Inquire about another action or quit
-                                inquirer.prompt([
-                                    backToStart
-                                ])
-                                .then(doMore => {
-                                    if(doMore.back_to_start) {
-                                        runProgram();
-                                    } else {
-                                        console.log('\nHave a nice day!');
-                                        process.exit();
-                                    }
+                                //Drop the managers table
+                                db.promise().query(dropManagersTable)
+                                .then(() => {
+                                    //Ask if the user wants to perform another action or quit.
+                                    inquirer.prompt([backToStart])
+                                    .then(userChoice => {
+                                        if(userChoice.back_to_start) {
+                                            runProgram();
+                                        } else {
+                                            console.log('\nHave a nice day!');
+                                            process.exit();
+                                        }
+                                    });
+                                })
+                                .catch(err => {
+                                    console.log(err);
                                 });
                             })
                             .catch(err => {
@@ -455,17 +539,21 @@ function employeesByManager() {
                         .then(([rows,fields]) => {
                             //console.log(fields);
                             console.log(cTable.getTable(rows));
-                            //Inquire about another action or quit
-                            inquirer.prompt([
-                                backToStart
-                            ])
-                            .then(doMore => {
-                                if(doMore.back_to_start) {
-                                    runProgram();
-                                } else {
-                                    console.log('\nHave a nice day!');
-                                    process.exit();
-                                }
+                            db.promise().query(dropManagersTable)
+                            .then(() => {
+                                //Ask if the user wants to perform another action or quit.
+                                inquirer.prompt([backToStart])
+                                .then(userChoice => {
+                                    if(userChoice.back_to_start) {
+                                        runProgram();
+                                    } else {
+                                        console.log('\nHave a nice day!');
+                                        process.exit();
+                                    }
+                                });
+                            })
+                            .catch(err => {
+                                console.log(err);
                             });
                         })
                         .catch(err => {
@@ -578,6 +666,245 @@ function employeesByDepartment() {
     });
 }
 
+function getDepartmentBudget() {
+    //This should use some of the same resources from employeesByDepartment
+    let departmentList; //Will hold an array of objects with a department_id = integer, role_ids = array of integers
+    let departmentChoices; //Will hold the list of department choices for inquirer
+
+    //Query the roles table - create array with containing all department ids - eliminate repeats by creating set - loop through roles to get role_ids associated with specific departments
+    db.promise().query(`SELECT * from role`)
+    .then(([rows,fields]) => {
+        
+        let depArr = [];
+        for(let i = 0; i < rows.length; i++) {
+            depArr.push(rows[i].department_id);
+        }
+        depArr = [...new Set(depArr)];
+
+        //Create the array of objects
+        departmentList = depArr.map(depNumber => {
+            return { dep_id: depNumber, role_ids: [] };
+        });
+
+        //Populate role_ids arrays
+        for(let i = 0; i < rows.length; i++) {
+            for(let j = 0; j < departmentList.length; j++) {
+                if(rows[i].department_id === departmentList[j].dep_id) {
+                    //Push object {id,salary} into role_ids
+                    departmentList[j].role_ids.push({id: rows[i].id, salary: rows[i].salary});
+                    break;
+                }
+            }
+        }
+        
+        //Query the departments to form the choices array
+        db.promise().query(`SELECT * FROM department`)
+        .then(([rows,fields]) => {
+            
+            //Choice Array
+            departmentChoices = rows.map(dChoice => `${dChoice.id}. ${dChoice.name}`);
+            
+            //Inquire about department
+            inquirer.prompt([
+                qList("dep_chosen","Choose a department from the list below to see its budget.",departmentChoices)
+            ])
+            .then(depChoice => {
+                let depId, depName;
+                let depArray = depChoice.dep_chosen.split(".");
+                depId = parseInt(depArray[0]);
+                depName = depArray[1].trim();
+
+                let depOb = departmentList.filter(dep => dep.dep_id === depId)[0];
+                //console.log(depOb);
+                //Gather role ids in a new array
+                let roleIds = [];
+                for(let i = 0; i < depOb.role_ids.length; i++) {
+                    roleIds.push(depOb.role_ids[i].id);
+                }
+                console.log(`\nBelow is the budget for the ${depName} department.\n`);
+
+                //Query the employee table to get only those employees whose role_id is in the array of role_ids for the department in question
+                db.promise().query(`SELECT * FROM employee WHERE employee.role_id IN (${roleIds.join(",")})`)
+                .then(([rows,fields]) => {
+                    //console.log(rows);
+                    let budget = 0;
+
+                    //Loop through matched employees and add salary to budget
+                    for(let i = 0; i < rows.length; i++) {
+                        for(let j = 0; j < depOb.role_ids.length; j++) {
+                            if(rows[i].role_id === depOb.role_ids[j].id) {
+                                budget += parseInt(depOb.role_ids[j].salary);
+                                break;
+                            }
+                        }
+                    }
+
+                    console.log(`\n\t$${budget}`);
+                    
+                    //Inquire about another action or quit
+                    inquirer.prompt([
+                        backToStart
+                    ])
+                    .then(doMore => {
+                        if(doMore.back_to_start) {
+                            runProgram();
+                        } else {
+                            console.log('\nHave a nice day!');
+                            process.exit();
+                        }
+                    });
+                })
+                .catch(err => {
+                    if(err) {
+                        console.log(err);
+                    }
+                });
+            });
+        })
+        .catch(err => {
+            if(err) {
+                console.log(err);
+            }
+        });
+    })
+    .catch(err => {
+        if(err) {
+            console.log(err);
+        }
+    });
+}
+
+//Methods for deleting departments, roles, and employees - I may not finish these
+//Downsizes an employee
+function downsize() {
+    let employeeList;
+    db.promise().query(`SELECT id, CONCAT(first_name, ' ', last_name) AS 'Employee Name' FROM employee`)
+    .then(([rows,fields]) => {
+        employeeList = rows.map(row => {
+            return `${row.id}. ${row["Employee Name"]}`;
+        });
+        
+        if(employeeList.length === 0) {
+            //Darn it!  No employees to dismiss!
+            console.log("\nThere are no employees yet!\n");
+            //Inquire about another action or quit
+            inquirer.prompt([
+                backToStart
+            ])
+            .then(doMore => {
+                if(doMore.back_to_start) {
+                    runProgram();
+                } else {
+                    console.log('\nHave a nice day!');
+                    process.exit();
+                }
+            });
+        } else {
+            //Whom to get rid of...
+            inquirer.prompt(
+                [qList("whomToAx","Which employee from the list below do you wish to let go?",employeeList)]
+            )
+            .then(scapegoat => {
+                const employeeDetails = scapegoat.whomToAx.split(".");
+                const empId = parseInt(employeeDetails[0]);
+                const employeeName = employeeDetails[1].trim();
+                
+                //You're fired!
+                db.promise().query(`DELETE FROM employee WHERE id = ?`,empId)
+                .then(([rows,fields]) => {
+                    console.log(`\n${employeeName} has left to pursue other opportunities.`);
+                    //Inquire about another action or quit
+                    inquirer.prompt([
+                        backToStart
+                    ])
+                    .then(doMore => {
+                        if(doMore.back_to_start) {
+                            runProgram();
+                        } else {
+                            console.log('\nHave a nice day!');
+                            process.exit();
+                        }
+                    });
+                })
+                .catch(err => {
+                    console.log(err);
+                });
+            })
+            .catch(err => {
+                console.log(err);
+            });
+        }
+    })
+    .catch(err => {
+        console.log(err);
+    });
+}
+
+//Outsources a role
+function outsource() {
+    let roleList;
+    db.promise().query(`SELECT role.id, role.title FROM role`)
+    .then(([rows,fields]) => {
+        if(rows.length === 0) {
+            //No roles yet!
+            console.log(`\nThere are no roles yet!\n`);
+            //Inquire about another action or quit
+            inquirer.prompt([
+                backToStart
+            ])
+            .then(doMore => {
+                if(doMore.back_to_start) {
+                    runProgram();
+                } else {
+                    console.log('\nHave a nice day!');
+                    process.exit();
+                }
+            });
+        } else {
+            roleList = rows.map(row => {
+                return `${row.id}. ${row.title}`;
+            });
+            
+            //Inquire about which role to delete
+            inquirer.prompt([
+                qList("toOutsource","Which of the following roles would you like to eliminate?",roleList)
+            ])
+            .then(outsourcee => {
+                const outArr = outsourcee.toOutsource.split(".");
+                const roleId = parseInt(outArr[0]);
+                const roleName = outArr[1].trim();
+                //Drop the role
+                db.promise().query(`DELETE FROM role WHERE id = ?`,roleId)
+                .then(() => {
+                    console.log(`\nThe role '${roleName}' has been eliminated!\n`);
+                    //Inquire about another action or quit
+                    inquirer.prompt([
+                        backToStart
+                    ])
+                    .then(doMore => {
+                        if(doMore.back_to_start) {
+                            runProgram();
+                        } else {
+                            console.log('\nHave a nice day!');
+                            process.exit();
+                        }
+                    });
+                })
+                .catch(err => {
+                    console.log(err);
+                });
+            })
+            .catch(err => {
+                console.log(err);
+            });
+        }
+        
+    })
+    .catch(err => {
+        console.log(err);
+    });
+}
+
 const runProgram = () => {
     inquirer.prompt(
         [whatToDo]
@@ -634,27 +961,47 @@ const runProgram = () => {
                 break;
             case "View all Employees":
                 //showEmployees();
-                db.promise().query(identifyManagers)
-                .then(([rows,fields]) => {
-                    console.log('\n');
-                    console.log(cTable.getTable(rows));
+                //Create the managers table
+                db.promise().query(dropManagersTable)
+                .then(() => {
+                    db.promise().query(populateManagers)
+                    .then(() => {
+                        db.promise().query(identifyManagers)
+                        .then(([rows,fields]) => {
+                            console.log('\n');
+                            console.log(cTable.getTable(rows));
+                        })
+                        .catch(err => {
+                            console.log(err);
+                        })
+                        .then(() => {
+                            //drop managers table
+                            db.promise().query(dropManagersTable)
+                            .then(() => {
+                                inquirer.prompt([
+                                    backToStart
+                                ])
+                                .then(doMore => {
+                                    if(doMore.back_to_start) {
+                                        runProgram();
+                                    } else {
+                                        console.log('\nHave a nice day!');
+                                        process.exit();
+                                    }
+                                });
+                            })
+                            .catch(err => {
+                                console.log(err);
+                            });
+                        });
+                    })
+                    .catch(err => {
+                        console.log(err);
+                    });
                 })
                 .catch(err => {
                     console.log(err);
                 })
-                .then(() => {
-                    inquirer.prompt([
-                        backToStart
-                    ])
-                    .then(doMore => {
-                        if(doMore.back_to_start) {
-                            runProgram();
-                        } else {
-                            console.log('\nHave a nice day!');
-                            process.exit();
-                        }
-                    });
-                });
                 break;
             case "Add Department":
                 //showDepartments();
@@ -693,43 +1040,7 @@ const runProgram = () => {
                 });
                 break;
             case "Add Role":
-                db.promise().query(queryRoles)
-                .then(([rows,fields]) => {
-                    console.log('\n');
-                    console.log(cTable.getTable(rows));
-                })
-                .catch(err => {
-                    console.log(err);
-                })
-                .then(() => {
-                    console.log('\nAbove is a table of the current roles, the departments to which the roles belong, and the salaries associated with the roles.  Please answer the following questions to add the new role.\n');
-                    inquirer.prompt(
-                        roleQs
-                    )
-                    .then(roleOb => {
-                        const qParams = [roleOb.role_name,roleOb.role_dep_id,roleOb.role_salary];
-                        db.promise().query(addRoleQuery,qParams)
-                        .then(([rows,fields]) => {
-                            console.log('\nThe role ' + roleOb.role_name + ' was successfully added.');
-                        })
-                        .catch(err => {
-                            console.log(err);
-                        })
-                        .then(() => {
-                            inquirer.prompt([
-                                backToStart
-                            ])
-                            .then(doMore => {
-                                if(doMore.back_to_start) {
-                                    runProgram();
-                                } else {
-                                    console.log('\nHave a nice day!');
-                                    process.exit();
-                                }
-                            });
-                        });
-                    });
-                });
+                addNewRole();
                 break;
             case "Add Employee":
                 addNewEmployee();
@@ -745,6 +1056,15 @@ const runProgram = () => {
                 break;
             case "See Employees by Department":
                 employeesByDepartment();
+                break;
+            case "See Department Budget":
+                getDepartmentBudget();
+                break;
+            case "Dismiss Employee":
+                downsize();
+                break;
+            case "Eliminate Role":
+                outsource();
                 break;
             case "Exit Program":
                 console.log('\nHave a nice day!');
