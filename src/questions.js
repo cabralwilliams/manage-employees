@@ -35,7 +35,7 @@ const qNumber = (name,message,invalidMssg) => {
         name: name,
         message: message,
         validate: function(inputVal) {
-            if(!inputVal || typeof inputVal !== "number" || inputVal <= 0 || Math.floor(inputVal) !== inputVal) {
+            if(!inputVal || typeof inputVal !== "number" || inputVal <= 0) {
                 console.log(invalidMssg);
                 return false;
             } else {

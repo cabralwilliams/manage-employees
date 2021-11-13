@@ -4,7 +4,7 @@ const inquirer = require('inquirer');
 const cTable = require('console.table');
 const db = require('./connection');
 
-const mainMenu = ["View all Departments","View all Roles","View all Employees","Add Department","Add Role","Add Employee","Update Employee Role","Update Employee Manager","See Employees by Manager","See Employees by Department","See Department Budget","Dismiss Employee","Eliminate Role","Exit Program"];
+const mainMenu = ["View all Departments","View all Roles","View all Employees","Add Department","Add Role","Add Employee","Update Employee Role","Update Employee Manager","See Employees by Manager","See Employees by Department","See Department Budget","Dismiss Employee","Eliminate Role","Eliminate Department","Exit Program"];
 
 const whatToDo = qList("employee_action","\nWelcome to the Employee Manager!\nChoose an action from the list below.\n",mainMenu);
 const backToStart = qConfirm("back_to_start","\nDo you wish to perform another action?  (Y for yes, N to quit)",true);
@@ -800,19 +800,14 @@ function downsize() {
                 }
             });
         } else {
+            employeeList.push("None");
             //Whom to get rid of...
             inquirer.prompt(
                 [qList("whomToAx","Which employee from the list below do you wish to let go?",employeeList)]
             )
             .then(scapegoat => {
-                const employeeDetails = scapegoat.whomToAx.split(".");
-                const empId = parseInt(employeeDetails[0]);
-                const employeeName = employeeDetails[1].trim();
-                
-                //You're fired!
-                db.promise().query(`DELETE FROM employee WHERE id = ?`,empId)
-                .then(([rows,fields]) => {
-                    console.log(`\n${employeeName} has left to pursue other opportunities.`);
+                if(scapegoat.whomToAx === "None") {
+                    console.log(`No employee will be downsized.`);
                     //Inquire about another action or quit
                     inquirer.prompt([
                         backToStart
@@ -825,10 +820,32 @@ function downsize() {
                             process.exit();
                         }
                     });
-                })
-                .catch(err => {
-                    console.log(err);
-                });
+                } else {
+                    const employeeDetails = scapegoat.whomToAx.split(".");
+                    const empId = parseInt(employeeDetails[0]);
+                    const employeeName = employeeDetails[1].trim();
+                    
+                    //You're fired!
+                    db.promise().query(`DELETE FROM employee WHERE id = ?`,empId)
+                    .then(([rows,fields]) => {
+                        console.log(`\n${employeeName} has left to pursue other opportunities.`);
+                        //Inquire about another action or quit
+                        inquirer.prompt([
+                            backToStart
+                        ])
+                        .then(doMore => {
+                            if(doMore.back_to_start) {
+                                runProgram();
+                            } else {
+                                console.log('\nHave a nice day!');
+                                process.exit();
+                            }
+                        });
+                    })
+                    .catch(err => {
+                        console.log(err);
+                    });
+                }
             })
             .catch(err => {
                 console.log(err);
@@ -864,19 +881,15 @@ function outsource() {
             roleList = rows.map(row => {
                 return `${row.id}. ${row.title}`;
             });
+            roleList.push("None");
             
             //Inquire about which role to delete
             inquirer.prompt([
                 qList("toOutsource","Which of the following roles would you like to eliminate?",roleList)
             ])
             .then(outsourcee => {
-                const outArr = outsourcee.toOutsource.split(".");
-                const roleId = parseInt(outArr[0]);
-                const roleName = outArr[1].trim();
-                //Drop the role
-                db.promise().query(`DELETE FROM role WHERE id = ?`,roleId)
-                .then(() => {
-                    console.log(`\nThe role '${roleName}' has been eliminated!\n`);
+                if(outsourcee.toOutsource === "None") {
+                    console.log(`\nNo role will be eliminated.\n`);
                     //Inquire about another action or quit
                     inquirer.prompt([
                         backToStart
@@ -889,16 +902,114 @@ function outsource() {
                             process.exit();
                         }
                     });
-                })
-                .catch(err => {
-                    console.log(err);
-                });
+                } else {
+                    const outArr = outsourcee.toOutsource.split(".");
+                    const roleId = parseInt(outArr[0]);
+                    const roleName = outArr[1].trim();
+                    //Drop the role
+                    db.promise().query(`DELETE FROM role WHERE id = ?`,roleId)
+                    .then(() => {
+                        console.log(`\nThe role '${roleName}' has been eliminated!\n`);
+                        //Inquire about another action or quit
+                        inquirer.prompt([
+                            backToStart
+                        ])
+                        .then(doMore => {
+                            if(doMore.back_to_start) {
+                                runProgram();
+                            } else {
+                                console.log('\nHave a nice day!');
+                                process.exit();
+                            }
+                        });
+                    })
+                    .catch(err => {
+                        console.log(err);
+                    });
+                }
             })
             .catch(err => {
                 console.log(err);
             });
         }
         
+    })
+    .catch(err => {
+        console.log(err);
+    });
+}
+
+//Reorganizes a department to, well, nothing
+function reorganize() {
+    db.promise().query("SELECT * FROM department")
+    .then(([rows,fields]) => {
+        if(rows.length === 0) {
+            console.log(`\nThere are no departments yet!  You probably should add one!\n`);
+            //Inquire about more actions
+            inquirer.prompt([
+                backToStart
+            ])
+            .then(doMore => {
+                if(doMore.back_to_start) {
+                    runProgram();
+                } else {
+                    console.log('\nHave a nice day!');
+                    process.exit();
+                }
+            });
+        } else {
+            let depList = rows.map(row => `${row.id}. ${row.name}`);
+            depList.push("None")
+            
+            //Inquire about which department to eliminate
+            inquirer.prompt([
+                qList("choppingBlock","Which department do you wish to eliminate?",depList)
+            ])
+            .then(optimized => {
+                if(optimized.choppingBlock === "None") {
+                    console.log("\nAll departments will be retained.\n");
+                    //Inquire about more actions
+                    inquirer.prompt([
+                        backToStart
+                    ])
+                    .then(doMore => {
+                        if(doMore.back_to_start) {
+                            runProgram();
+                        } else {
+                            console.log('\nHave a nice day!');
+                            process.exit();
+                        }
+                    });
+                } else {
+                    const depArr = optimized.choppingBlock.split(".");
+                    const depId = parseInt(depArr[0]);
+                    const depName = depArr[1].trim();
+                    //Eliminate the department
+                    db.promise().query("DELETE FROM department WHERE id = ?", depId)
+                    .then(() => {
+                        console.log(`\nThe department '${depName}' has been eliminated.\n`);
+                        //Inquire about more actions
+                        inquirer.prompt([
+                            backToStart
+                        ])
+                        .then(doMore => {
+                            if(doMore.back_to_start) {
+                                runProgram();
+                            } else {
+                                console.log('\nHave a nice day!');
+                                process.exit();
+                            }
+                        });
+                    })
+                    .catch(err => {
+                        console.log(err);
+                    });
+                }
+            })
+            .catch(err => {
+                console.log(err);
+            });
+        }
     })
     .catch(err => {
         console.log(err);
@@ -1065,6 +1176,9 @@ const runProgram = () => {
                 break;
             case "Eliminate Role":
                 outsource();
+                break;
+            case "Eliminate Department":
+                reorganize();
                 break;
             case "Exit Program":
                 console.log('\nHave a nice day!');
