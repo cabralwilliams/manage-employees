@@ -283,86 +283,107 @@ LEFT JOIN role ON employee.role_id = role.id`;
 function updateRole() {
     let empArr, empList, roleList, roleChangeMsg, empId, emp_name;
 
-    //First query will get a list of employee roles
-    db.promise().query(`SELECT role.id, role.title FROM role`)
+    //Check to see whether any employees exist yet
+    db.promise().query("SELECT * FROM employee")
     .then(([rows,fields]) => {
-        roleList = rows.map(roleDatum => `${roleDatum.id}. ${roleDatum.title}`);
+        if(rows.length === 0) {
+            console.log(`\nThere are no employees whose roles can be changed yet.\n`);
+            //Ask if the user wants to perform another action or quit.
+            inquirer.prompt([backToStart])
+            .then(userChoice => {
+                if(userChoice.back_to_start) {
+                    runProgram();
+                } else {
+                    console.log('\nHave a nice day!');
+                    process.exit();
+                }
+            });
+        } else {
+            //First query will get a list of employee roles
+            db.promise().query(`SELECT role.id, role.title FROM role`)
+            .then(([rows,fields]) => {
+                roleList = rows.map(roleDatum => `${roleDatum.id}. ${roleDatum.title}`);
 
-        //Second query will show a list of employees and current roles
-        db.promise().query(up_role_q1)
-        .then(([rows,fields]) => {
-            console.log(cTable.getTable(rows));
+                //Second query will show a list of employees and current roles
+                db.promise().query(up_role_q1)
+                .then(([rows,fields]) => {
+                    console.log(cTable.getTable(rows));
 
-            //Next query will consolidate employees into selectable list
-            db.promise().query(`SELECT * FROM employee`)
-            .then(([rows, fields]) => {
-                //Set empArr to recovered data
-                empArr = rows;
-                //console.log(empArr);
+                    //Next query will consolidate employees into selectable list
+                    db.promise().query(`SELECT * FROM employee`)
+                    .then(([rows, fields]) => {
+                        //Set empArr to recovered data
+                        empArr = rows;
+                        //console.log(empArr);
 
-                //empArr[n] = {id, first_name, last_name, role_id, manager_id}
-                //map empArr to 'id. first_name last_name'
-                empList = empArr.map(employee => {
-                    return `${employee.id}. ${employee.first_name} ${employee.last_name}`;
-                });
-
-                //process.exit();
-                inquirer.prompt([
-                    {
-                        name: 'selection',
-                        type: "list",
-                        message: "Select the employee whose role you wish to update.",
-                        choices: empList
-                    }
-                ])
-                .then(sel_emp =>{
-                    //Determine which employee was selected
-                    let sel_Arr = sel_emp.selection.split(".");
-                    empId = parseInt(sel_Arr[0]);
-                    emp_name = sel_Arr[1].trim();
-                    roleChangeMsg = `Select the new role for ${emp_name} from the list of choices below.`;
-                })
-                .then(() => {
-                    inquirer.prompt([
-                        {
-                            type: "list",
-                            name: "new_role",
-                            message: roleChangeMsg,
-                            choices: roleList
-                        }
-                    ])
-                    .then(updatedRole => {
-                        let new_role_id = parseInt(updatedRole.new_role.split(".")[0]);
-
-                        //Update the employee with the new role id
-                        db.promise().query(`UPDATE employee SET employee.role_id = ? WHERE employee.id = ?`,[new_role_id,empId])
-                        .then(([rows,fields]) => {
-                            console.log(`\n${emp_name}'s role was successfully changed!`);
-                            inquirer.prompt([
-                                backToStart
-                            ])
-                            .then(doMore => {
-                                if(doMore.back_to_start) {
-                                    runProgram();
-                                } else {
-                                    console.log('\nHave a nice day!');
-                                    process.exit();
-                                }
-                            });
-                        })
-                        .catch(err => {
-                            console.log(err);
+                        //empArr[n] = {id, first_name, last_name, role_id, manager_id}
+                        //map empArr to 'id. first_name last_name'
+                        empList = empArr.map(employee => {
+                            return `${employee.id}. ${employee.first_name} ${employee.last_name}`;
                         });
+
+                        //process.exit();
+                        inquirer.prompt([
+                            {
+                                name: 'selection',
+                                type: "list",
+                                message: "Select the employee whose role you wish to update.",
+                                choices: empList
+                            }
+                        ])
+                        .then(sel_emp =>{
+                            //Determine which employee was selected
+                            let sel_Arr = sel_emp.selection.split(".");
+                            empId = parseInt(sel_Arr[0]);
+                            emp_name = sel_Arr[1].trim();
+                            roleChangeMsg = `Select the new role for ${emp_name} from the list of choices below.`;
+                        })
+                        .then(() => {
+                            inquirer.prompt([
+                                {
+                                    type: "list",
+                                    name: "new_role",
+                                    message: roleChangeMsg,
+                                    choices: roleList
+                                }
+                            ])
+                            .then(updatedRole => {
+                                let new_role_id = parseInt(updatedRole.new_role.split(".")[0]);
+
+                                //Update the employee with the new role id
+                                db.promise().query(`UPDATE employee SET employee.role_id = ? WHERE employee.id = ?`,[new_role_id,empId])
+                                .then(([rows,fields]) => {
+                                    console.log(`\n${emp_name}'s role was successfully changed!`);
+                                    inquirer.prompt([
+                                        backToStart
+                                    ])
+                                    .then(doMore => {
+                                        if(doMore.back_to_start) {
+                                            runProgram();
+                                        } else {
+                                            console.log('\nHave a nice day!');
+                                            process.exit();
+                                        }
+                                    });
+                                })
+                                .catch(err => {
+                                    console.log(err);
+                                });
+                            });
+                        });
+                    })
+                    .catch(err => {
+                        console.log(err);
                     });
+                })
+                .catch(err => {
+                    console.log(err);
                 });
             })
             .catch(err => {
                 console.log(err);
             });
-        })
-        .catch(err => {
-            console.log(err);
-        });
+        }
     })
     .catch(err => {
         console.log(err);
@@ -376,122 +397,143 @@ function updateManager() {
     let emp_name; //Full name of the employee
     let manage_id; //Stores the manager id
 
-    //Drop and recreate managers table
-    db.promise().query(dropManagersTable)
-    .then(() => {
-        //Create managers table
-        db.promise().query(populateManagers)
-        .then(() => {
-            //Get employees array and display list of employees with current manager
-            db.promise().query(`SELECT employee.id, CONCAT(employee.first_name, ' ', employee.last_name) AS 'Employee Name', CONCAT(managers.first_name, ' ', managers.last_name) AS 'Current Manager'
-            FROM employee
-            LEFT JOIN managers ON employee.manager_id = managers.id`)
-            .then(([rows,fields]) => {
-                emp_array = rows;
-                emp_list = emp_array.map(listOb => `${listOb.id}. ${listOb['Employee Name']}`);
-                //console.log(emp_array);
-                //process.exit();
+    //Check to see whether any employees exist yet
+    db.promise().query("SELECT * FROM employee")
+    .then(([rows,fields]) => {
+        if(rows.length === 0) {
+            console.log(`\nThere are no employees whose roles can be changed yet.\n`);
+            //Ask if the user wants to perform another action or quit.
+            inquirer.prompt([backToStart])
+            .then(userChoice => {
+                if(userChoice.back_to_start) {
+                    runProgram();
+                } else {
+                    console.log('\nHave a nice day!');
+                    process.exit();
+                }
+            });
+        } else {
+            //Drop and recreate managers table
+            db.promise().query(dropManagersTable)
+            .then(() => {
+                //Create managers table
+                db.promise().query(populateManagers)
+                .then(() => {
+                    //Get employees array and display list of employees with current manager
+                    db.promise().query(`SELECT employee.id, CONCAT(employee.first_name, ' ', employee.last_name) AS 'Employee Name', CONCAT(managers.first_name, ' ', managers.last_name) AS 'Current Manager'
+                    FROM employee
+                    LEFT JOIN managers ON employee.manager_id = managers.id`)
+                    .then(([rows,fields]) => {
+                        emp_array = rows;
+                        emp_list = emp_array.map(listOb => `${listOb.id}. ${listOb['Employee Name']}`);
+                        //console.log(emp_array);
+                        //process.exit();
 
-                //Show the list of employees and current managers
-                console.log(cTable.getTable(emp_array));
+                        //Show the list of employees and current managers
+                        console.log(cTable.getTable(emp_array));
 
-                //Use inquirer to choose an employee whose manager should change
-                inquirer.prompt([
-                    qList('selEmployee','Select the employee whose manager you wish to update.',emp_list)
-                ])
-                .then(selected => {
-                    let split_select = selected.selEmployee.split(".");
-                    emp_id = parseInt(split_select[0]);
-                    emp_name = split_select[1].trim();
+                        //Use inquirer to choose an employee whose manager should change
+                        inquirer.prompt([
+                            qList('selEmployee','Select the employee whose manager you wish to update.',emp_list)
+                        ])
+                        .then(selected => {
+                            let split_select = selected.selEmployee.split(".");
+                            emp_id = parseInt(split_select[0]);
+                            emp_name = split_select[1].trim();
 
-                    //Create the manager selection list excluding the selected employee
-                    let managerChoices = emp_list.filter(nextEmp => parseInt(nextEmp.split(".")[0]) !== emp_id);
+                            //Create the manager selection list excluding the selected employee
+                            let managerChoices = emp_list.filter(nextEmp => parseInt(nextEmp.split(".")[0]) !== emp_id);
 
-                    //console.log(managerChoices);
-                    //process.exit();
+                            //console.log(managerChoices);
+                            //process.exit();
 
-                    //Push Leave Current Manager option
-                    managerChoices.push("Leave Current Manager","Set Manager to None");
+                            //Push Leave Current Manager option
+                            managerChoices.push("Leave Current Manager","Set Manager to None");
 
-                    //Use inquirer to choose new manager
-                    inquirer.prompt([
-                        qList("newManager",`Select the new manager for ${emp_name} from the list below.`,managerChoices)
-                    ])
-                    .then(nextOb => {
-                        if(nextOb.newManager === "Leave Current Manager") {
-                            //Inquire about another action or quit
+                            //Use inquirer to choose new manager
                             inquirer.prompt([
-                                backToStart
+                                qList("newManager",`Select the new manager for ${emp_name} from the list below.`,managerChoices)
                             ])
-                            .then(doMore => {
-                                if(doMore.back_to_start) {
-                                    runProgram();
-                                } else {
-                                    console.log('\nHave a nice day!');
-                                    process.exit();
-                                }
-                            });
-                        } else if(nextOb.newManager === "Set Manager to None") {
-                            //Run the query to set manager to null
-                            db.promise().query(`UPDATE employee SET employee.manager_id = NULL WHERE employee.id = ?`,emp_id)
-                            .then(() => {
-                                console.log(`${emp_name}'s manager was successfully set to none/null.`);
-                                //Inquire about another action or quit
-                                inquirer.prompt([
-                                    backToStart
-                                ])
-                                .then(doMore => {
-                                    if(doMore.back_to_start) {
-                                        runProgram();
-                                    } else {
-                                        console.log('\nHave a nice day!');
-                                        process.exit();
-                                    }
-                                });
-                            })
-                            .catch(err => {
-                                console.log(err);
-                            });
-                        } else {
-                            //Run the query to set manager to new value based on id
-                            let nextArr = nextOb.newManager.split(".");
-                            manage_id = parseInt(nextArr[0]);
-                            let newManagerName = nextArr[1].trim();
-                            db.promise().query(`UPDATE employee SET employee.manager_id = ? WHERE employee.id = ?`,[manage_id,emp_id])
-                            .then(() => {
-                                console.log(`${emp_name}'s manager was successfully set to ${newManagerName}.`);
-                                //Drop the managers table
-                                db.promise().query(dropManagersTable)
-                                .then(() => {
-                                    //Ask if the user wants to perform another action or quit.
-                                    inquirer.prompt([backToStart])
-                                    .then(userChoice => {
-                                        if(userChoice.back_to_start) {
+                            .then(nextOb => {
+                                if(nextOb.newManager === "Leave Current Manager") {
+                                    //Inquire about another action or quit
+                                    inquirer.prompt([
+                                        backToStart
+                                    ])
+                                    .then(doMore => {
+                                        if(doMore.back_to_start) {
                                             runProgram();
                                         } else {
                                             console.log('\nHave a nice day!');
                                             process.exit();
                                         }
                                     });
-                                })
-                                .catch(err => {
-                                    console.log(err);
-                                });
+                                } else if(nextOb.newManager === "Set Manager to None") {
+                                    //Run the query to set manager to null
+                                    db.promise().query(`UPDATE employee SET employee.manager_id = NULL WHERE employee.id = ?`,emp_id)
+                                    .then(() => {
+                                        console.log(`${emp_name}'s manager was successfully set to none/null.`);
+                                        //Inquire about another action or quit
+                                        inquirer.prompt([
+                                            backToStart
+                                        ])
+                                        .then(doMore => {
+                                            if(doMore.back_to_start) {
+                                                runProgram();
+                                            } else {
+                                                console.log('\nHave a nice day!');
+                                                process.exit();
+                                            }
+                                        });
+                                    })
+                                    .catch(err => {
+                                        console.log(err);
+                                    });
+                                } else {
+                                    //Run the query to set manager to new value based on id
+                                    let nextArr = nextOb.newManager.split(".");
+                                    manage_id = parseInt(nextArr[0]);
+                                    let newManagerName = nextArr[1].trim();
+                                    db.promise().query(`UPDATE employee SET employee.manager_id = ? WHERE employee.id = ?`,[manage_id,emp_id])
+                                    .then(() => {
+                                        console.log(`${emp_name}'s manager was successfully set to ${newManagerName}.`);
+                                        //Drop the managers table
+                                        db.promise().query(dropManagersTable)
+                                        .then(() => {
+                                            //Ask if the user wants to perform another action or quit.
+                                            inquirer.prompt([backToStart])
+                                            .then(userChoice => {
+                                                if(userChoice.back_to_start) {
+                                                    runProgram();
+                                                } else {
+                                                    console.log('\nHave a nice day!');
+                                                    process.exit();
+                                                }
+                                            });
+                                        })
+                                        .catch(err => {
+                                            console.log(err);
+                                        });
+                                    })
+                                    .catch(err => {
+                                        console.log(err);
+                                    });
+                                }
                             })
-                            .catch(err => {
-                                console.log(err);
-                            });
-                        }
+                        })
                     })
+                    .catch(err => {
+                        console.log(err);
+                    });
                 })
+                .catch(err => {
+                    console.log(err);
+                });
             })
             .catch(err => {
                 console.log(err);
             });
-        })
-        .catch(err => {
-            console.log(err);
-        });
+        }
     })
     .catch(err => {
         console.log(err);
@@ -502,63 +544,87 @@ function employeesByManager() {
     let manager_list;
     let man_id_list;
 
-    //Drop and recreate managers table
-    db.promise().query(dropManagersTable)
-    .then(() => {
-        //Add managers table back
-        db.promise().query(populateManagers)
-        .then(([rows,fields]) => {
-            //Select manager_id from employees and filter out the null values
-            db.promise().query('SELECT employee.manager_id FROM employee')
-            .then(([rows,fields]) => {
-                //Convert returned object array to array of numbers
-                man_id_list = rows.map(row => row.manager_id).filter(idVal => idVal !== null);
-
-                //Only get unique values for manager ids
-                man_id_list = [...new Set(man_id_list)];
-
-                //Run query to only get employees who have been assigned as managers
-                db.promise().query(`SELECT * FROM managers WHERE managers.employee_id IN (${man_id_list.join(",")})`)
+    //Check to see whether any employees exist yet
+    db.promise().query("SELECT * FROM employee")
+    .then(([rows,fields]) => {
+        if(rows.length === 0) {
+            console.log(`\nThere are no employees whose roles can be changed yet.\n`);
+            //Ask if the user wants to perform another action or quit.
+            inquirer.prompt([backToStart])
+            .then(userChoice => {
+                if(userChoice.back_to_start) {
+                    runProgram();
+                } else {
+                    console.log('\nHave a nice day!');
+                    process.exit();
+                }
+            });
+        } else {
+            //Drop and recreate managers table
+            db.promise().query(dropManagersTable)
+            .then(() => {
+                //Add managers table back
+                db.promise().query(populateManagers)
                 .then(([rows,fields]) => {
-                    //Turn the list into a selectable array
-                    manager_list = rows.map(row => `${row.id}. ${row.first_name} ${row.last_name}`);
-                    
-                    //Inquire about which manager is wanted
-                    inquirer.prompt([
-                        qList("which_manager","Select a manager from the list below to see that manager's employees.",manager_list)
-                    ])
-                    .then(theManager => {
-                        let managerArray = theManager.which_manager.split(".");
-                        //Get manager name and id for further use
-                        let managerId = parseInt(managerArray[0]);
-                        let managerName = managerArray[1].trim();
+                    //Select manager_id from employees and filter out the null values
+                    db.promise().query('SELECT employee.manager_id FROM employee')
+                    .then(([rows,fields]) => {
+                        //Convert returned object array to array of numbers
+                        man_id_list = rows.map(row => row.manager_id).filter(idVal => idVal !== null);
 
-                        console.log(`Below are all employees who report to ${managerName}.\n`);
-                        //Retrieve the employees in question
-                        db.promise().query(`SELECT CONCAT(employee.first_name, ' ', employee.last_name) AS 'Employees Reporting to ${managerName}' FROM employee WHERE employee.manager_id = ?`,managerId)
+                        //Only get unique values for manager ids
+                        man_id_list = [...new Set(man_id_list)];
+
+                        //Run query to only get employees who have been assigned as managers
+                        db.promise().query(`SELECT * FROM managers WHERE managers.employee_id IN (${man_id_list.join(",")})`)
                         .then(([rows,fields]) => {
-                            //console.log(fields);
-                            console.log(cTable.getTable(rows));
-                            db.promise().query(dropManagersTable)
-                            .then(() => {
-                                //Ask if the user wants to perform another action or quit.
-                                inquirer.prompt([backToStart])
-                                .then(userChoice => {
-                                    if(userChoice.back_to_start) {
-                                        runProgram();
-                                    } else {
-                                        console.log('\nHave a nice day!');
-                                        process.exit();
-                                    }
+                            //Turn the list into a selectable array
+                            manager_list = rows.map(row => `${row.id}. ${row.first_name} ${row.last_name}`);
+                            
+                            //Inquire about which manager is wanted
+                            inquirer.prompt([
+                                qList("which_manager","Select a manager from the list below to see that manager's employees.",manager_list)
+                            ])
+                            .then(theManager => {
+                                let managerArray = theManager.which_manager.split(".");
+                                //Get manager name and id for further use
+                                let managerId = parseInt(managerArray[0]);
+                                let managerName = managerArray[1].trim();
+
+                                console.log(`Below are all employees who report to ${managerName}.\n`);
+                                //Retrieve the employees in question
+                                db.promise().query(`SELECT CONCAT(employee.first_name, ' ', employee.last_name) AS 'Employees Reporting to ${managerName}' FROM employee WHERE employee.manager_id = ?`,managerId)
+                                .then(([rows,fields]) => {
+                                    //console.log(fields);
+                                    console.log(cTable.getTable(rows));
+                                    db.promise().query(dropManagersTable)
+                                    .then(() => {
+                                        //Ask if the user wants to perform another action or quit.
+                                        inquirer.prompt([backToStart])
+                                        .then(userChoice => {
+                                            if(userChoice.back_to_start) {
+                                                runProgram();
+                                            } else {
+                                                console.log('\nHave a nice day!');
+                                                process.exit();
+                                            }
+                                        });
+                                    })
+                                    .catch(err => {
+                                        console.log(err);
+                                    });
+                                })
+                                .catch(err => {
+                                    console.log(err);
                                 });
-                            })
-                            .catch(err => {
-                                console.log(err);
                             });
                         })
                         .catch(err => {
                             console.log(err);
                         });
+                    })
+                    .catch(err => {
+                        console.log(err);
                     });
                 })
                 .catch(err => {
@@ -568,10 +634,7 @@ function employeesByManager() {
             .catch(err => {
                 console.log(err);
             });
-        })
-        .catch(err => {
-            console.log(err);
-        });
+        }
     })
     .catch(err => {
         console.log(err);
@@ -585,79 +648,110 @@ function employeesByDepartment() {
     //Query the roles table - create array with containing all department ids - eliminate repeats by creating set - loop through roles to get role_ids associated with specific departments
     db.promise().query(`SELECT * from role`)
     .then(([rows,fields]) => {
-        
-        let depArr = [];
-        for(let i = 0; i < rows.length; i++) {
-            depArr.push(rows[i].department_id);
-        }
-        depArr = [...new Set(depArr)];
-
-        //Create the array of objects
-        departmentList = depArr.map(depNumber => {
-            return { dep_id: depNumber, role_ids: [] };
-        });
-
-        //Populate role_ids arrays
-        for(let i = 0; i < rows.length; i++) {
-            for(let j = 0; j < departmentList.length; j++) {
-                if(rows[i].department_id === departmentList[j].dep_id) {
-                    departmentList[j].role_ids.push(rows[i].id);
-                    break;
+        if(rows.length === 0) {
+            console.log(`\nThere are no roles to place in departments!\n`);
+            //Inquire about another action or quit
+            inquirer.prompt([
+                backToStart
+            ])
+            .then(doMore => {
+                if(doMore.back_to_start) {
+                    runProgram();
+                } else {
+                    console.log('\nHave a nice day!');
+                    process.exit();
+                }
+            });
+        } else {
+            let depArr = [];
+            for(let i = 0; i < rows.length; i++) {
+                depArr.push(rows[i].department_id);
+            }
+            depArr = [...new Set(depArr)];
+    
+            //Create the array of objects
+            departmentList = depArr.map(depNumber => {
+                return { dep_id: depNumber, role_ids: [] };
+            });
+    
+            //Populate role_ids arrays
+            for(let i = 0; i < rows.length; i++) {
+                for(let j = 0; j < departmentList.length; j++) {
+                    if(rows[i].department_id === departmentList[j].dep_id) {
+                        departmentList[j].role_ids.push(rows[i].id);
+                        break;
+                    }
                 }
             }
-        }
-        
-        //Query the departments to form the choices array
-        db.promise().query(`SELECT * FROM department`)
-        .then(([rows,fields]) => {
             
-            //Choice Array
-            departmentChoices = rows.map(dChoice => `${dChoice.id}. ${dChoice.name}`);
-            
-            //Inquire about department
-            inquirer.prompt([
-                qList("dep_chosen","Choose a department from the list below to see its employees.",departmentChoices)
-            ])
-            .then(depChoice => {
-                let depId, depName;
-                let depArray = depChoice.dep_chosen.split(".");
-                depId = parseInt(depArray[0]);
-                depName = depArray[1].trim();
-
-                let depOb = departmentList.filter(dep => dep.dep_id === depId)[0];
-                console.log(`\nBelow is a list of all of the employees in the ${depName} department.\n`);
-
-                //Query the employee table to get only those employees whose role_id is in the array of role_ids for the department in question
-                db.promise().query(`SELECT CONCAT(employee.first_name, ' ', employee.last_name) AS 'Employee Name', role.title AS Title
-                FROM employee
-                LEFT JOIN role ON employee.role_id = role.id WHERE role.id IN (${depOb.role_ids.join(",")})`)
-                .then(([rows,fields]) => {
-                    console.log(cTable.getTable(rows));
-                    //Inquire about another action or quit
-                    inquirer.prompt([
-                        backToStart
-                    ])
-                    .then(doMore => {
-                        if(doMore.back_to_start) {
-                            runProgram();
-                        } else {
-                            console.log('\nHave a nice day!');
-                            process.exit();
-                        }
-                    });
-                })
-                .catch(err => {
-                    if(err) {
-                        console.log(err);
+            //Query the departments to form the choices array
+            db.promise().query(`SELECT * FROM department`)
+            .then(([rows,fields]) => {
+                
+                //Choice Array
+                departmentChoices = rows.map(dChoice => `${dChoice.id}. ${dChoice.name}`);
+                
+                //Inquire about department
+                inquirer.prompt([
+                    qList("dep_chosen","Choose a department from the list below to see its employees.",departmentChoices)
+                ])
+                .then(depChoice => {
+                    let depId, depName;
+                    let depArray = depChoice.dep_chosen.split(".");
+                    depId = parseInt(depArray[0]);
+                    depName = depArray[1].trim();
+    
+                    let depOb = departmentList.filter(dep => dep.dep_id === depId)[0];
+                    if(!depOb) {
+                        console.log(`\nThere are no employees in the ${depName} department.\n`);
+                        //Inquire about another action or quit
+                        inquirer.prompt([
+                            backToStart
+                        ])
+                        .then(doMore => {
+                            if(doMore.back_to_start) {
+                                runProgram();
+                            } else {
+                                console.log('\nHave a nice day!');
+                                process.exit();
+                            }
+                        });
+                    } else {
+                        console.log(`\nBelow is a list of all of the employees in the ${depName} department.\n`);
+    
+                        //Query the employee table to get only those employees whose role_id is in the array of role_ids for the department in question
+                        db.promise().query(`SELECT CONCAT(employee.first_name, ' ', employee.last_name) AS 'Employee Name', role.title AS Title
+                        FROM employee
+                        LEFT JOIN role ON employee.role_id = role.id WHERE role.id IN (${depOb.role_ids.join(",")})`)
+                        .then(([rows,fields]) => {
+                            console.log(cTable.getTable(rows));
+                            //Inquire about another action or quit
+                            inquirer.prompt([
+                                backToStart
+                            ])
+                            .then(doMore => {
+                                if(doMore.back_to_start) {
+                                    runProgram();
+                                } else {
+                                    console.log('\nHave a nice day!');
+                                    process.exit();
+                                }
+                            });
+                        })
+                        .catch(err => {
+                            if(err) {
+                                console.log(err);
+                            }
+                        });
                     }
                 });
+            })
+            .catch(err => {
+                if(err) {
+                    console.log(err);
+                }
             });
-        })
-        .catch(err => {
-            if(err) {
-                console.log(err);
-            }
-        });
+        }
     })
     .catch(err => {
         if(err) {
@@ -674,98 +768,129 @@ function getDepartmentBudget() {
     //Query the roles table - create array with containing all department ids - eliminate repeats by creating set - loop through roles to get role_ids associated with specific departments
     db.promise().query(`SELECT * from role`)
     .then(([rows,fields]) => {
-        
-        let depArr = [];
-        for(let i = 0; i < rows.length; i++) {
-            depArr.push(rows[i].department_id);
-        }
-        depArr = [...new Set(depArr)];
-
-        //Create the array of objects
-        departmentList = depArr.map(depNumber => {
-            return { dep_id: depNumber, role_ids: [] };
-        });
-
-        //Populate role_ids arrays
-        for(let i = 0; i < rows.length; i++) {
-            for(let j = 0; j < departmentList.length; j++) {
-                if(rows[i].department_id === departmentList[j].dep_id) {
-                    //Push object {id,salary} into role_ids
-                    departmentList[j].role_ids.push({id: rows[i].id, salary: rows[i].salary});
-                    break;
+        if(rows.length === 0) {
+            console.log(`\nThere are no roles to pay salaries at the moment.\n`);
+            //Inquire about another action or quit
+            inquirer.prompt([
+                backToStart
+            ])
+            .then(doMore => {
+                if(doMore.back_to_start) {
+                    runProgram();
+                } else {
+                    console.log('\nHave a nice day!');
+                    process.exit();
+                }
+            });
+        } else {
+            let depArr = [];
+            for(let i = 0; i < rows.length; i++) {
+                depArr.push(rows[i].department_id);
+            }
+            depArr = [...new Set(depArr)];
+    
+            //Create the array of objects
+            departmentList = depArr.map(depNumber => {
+                return { dep_id: depNumber, role_ids: [] };
+            });
+    
+            //Populate role_ids arrays
+            for(let i = 0; i < rows.length; i++) {
+                for(let j = 0; j < departmentList.length; j++) {
+                    if(rows[i].department_id === departmentList[j].dep_id) {
+                        //Push object {id,salary} into role_ids
+                        departmentList[j].role_ids.push({id: rows[i].id, salary: rows[i].salary});
+                        break;
+                    }
                 }
             }
-        }
-        
-        //Query the departments to form the choices array
-        db.promise().query(`SELECT * FROM department`)
-        .then(([rows,fields]) => {
             
-            //Choice Array
-            departmentChoices = rows.map(dChoice => `${dChoice.id}. ${dChoice.name}`);
-            
-            //Inquire about department
-            inquirer.prompt([
-                qList("dep_chosen","Choose a department from the list below to see its budget.",departmentChoices)
-            ])
-            .then(depChoice => {
-                let depId, depName;
-                let depArray = depChoice.dep_chosen.split(".");
-                depId = parseInt(depArray[0]);
-                depName = depArray[1].trim();
+            //Query the departments to form the choices array
+            db.promise().query(`SELECT * FROM department`)
+            .then(([rows,fields]) => {
+                
+                //Choice Array
+                departmentChoices = rows.map(dChoice => `${dChoice.id}. ${dChoice.name}`);
+                
+                //Inquire about department
+                inquirer.prompt([
+                    qList("dep_chosen","Choose a department from the list below to see its budget.",departmentChoices)
+                ])
+                .then(depChoice => {
+                    let depId, depName;
+                    let depArray = depChoice.dep_chosen.split(".");
+                    depId = parseInt(depArray[0]);
+                    depName = depArray[1].trim();
+    
+                    let depOb = departmentList.filter(dep => dep.dep_id === depId)[0];
 
-                let depOb = departmentList.filter(dep => dep.dep_id === depId)[0];
-                //console.log(depOb);
-                //Gather role ids in a new array
-                let roleIds = [];
-                for(let i = 0; i < depOb.role_ids.length; i++) {
-                    roleIds.push(depOb.role_ids[i].id);
-                }
-                console.log(`\nBelow is the budget for the ${depName} department.\n`);
-
-                //Query the employee table to get only those employees whose role_id is in the array of role_ids for the department in question
-                db.promise().query(`SELECT * FROM employee WHERE employee.role_id IN (${roleIds.join(",")})`)
-                .then(([rows,fields]) => {
-                    //console.log(rows);
-                    let budget = 0;
-
-                    //Loop through matched employees and add salary to budget
-                    for(let i = 0; i < rows.length; i++) {
-                        for(let j = 0; j < depOb.role_ids.length; j++) {
-                            if(rows[i].role_id === depOb.role_ids[j].id) {
-                                budget += parseInt(depOb.role_ids[j].salary);
-                                break;
+                    if(!depOb) {
+                        console.log(`\nThere are no employees in the ${depName} department.\n`);
+                        //Inquire about another action or quit
+                        inquirer.prompt([
+                            backToStart
+                        ])
+                        .then(doMore => {
+                            if(doMore.back_to_start) {
+                                runProgram();
+                            } else {
+                                console.log('\nHave a nice day!');
+                                process.exit();
                             }
+                        });
+                    } else {
+                        //Gather role ids in a new array
+                        let roleIds = [];
+                        for(let i = 0; i < depOb.role_ids.length; i++) {
+                            roleIds.push(depOb.role_ids[i].id);
                         }
-                    }
+                        console.log(`\nBelow is the budget for the ${depName} department.\n`);
 
-                    console.log(`\n\t$${budget}`);
-                    
-                    //Inquire about another action or quit
-                    inquirer.prompt([
-                        backToStart
-                    ])
-                    .then(doMore => {
-                        if(doMore.back_to_start) {
-                            runProgram();
-                        } else {
-                            console.log('\nHave a nice day!');
-                            process.exit();
-                        }
-                    });
-                })
-                .catch(err => {
-                    if(err) {
-                        console.log(err);
+                        //Query the employee table to get only those employees whose role_id is in the array of role_ids for the department in question
+                        db.promise().query(`SELECT * FROM employee WHERE employee.role_id IN (${roleIds.join(",")})`)
+                        .then(([rows,fields]) => {
+                            //console.log(rows);
+                            let budget = 0;
+
+                            //Loop through matched employees and add salary to budget
+                            for(let i = 0; i < rows.length; i++) {
+                                for(let j = 0; j < depOb.role_ids.length; j++) {
+                                    if(rows[i].role_id === depOb.role_ids[j].id) {
+                                        budget += parseInt(depOb.role_ids[j].salary);
+                                        break;
+                                    }
+                                }
+                            }
+
+                            console.log(`\n\t$${budget}`);
+                            
+                            //Inquire about another action or quit
+                            inquirer.prompt([
+                                backToStart
+                            ])
+                            .then(doMore => {
+                                if(doMore.back_to_start) {
+                                    runProgram();
+                                } else {
+                                    console.log('\nHave a nice day!');
+                                    process.exit();
+                                }
+                            });
+                        })
+                        .catch(err => {
+                            if(err) {
+                                console.log(err);
+                            }
+                        });
                     }
                 });
+            })
+            .catch(err => {
+                if(err) {
+                    console.log(err);
+                }
             });
-        })
-        .catch(err => {
-            if(err) {
-                console.log(err);
-            }
-        });
+        }
     })
     .catch(err => {
         if(err) {
