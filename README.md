@@ -1,5 +1,6 @@
 # Manage Employees
 
+![Initial Menu](./assets/images/employee-manager1.jpg)
   
   ## Description
   This application, once set up, will allow the user to manage certain details about a work organization.  The user will be able to create department, role, and employee data.  The user will also be able to assign and update managers and roles of those employees.
