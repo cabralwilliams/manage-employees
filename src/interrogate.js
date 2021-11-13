@@ -127,36 +127,55 @@ function addNewRole() {
     db.promise().query(queryDepartments)
     .then(([rows,fields]) => {
         //Returned row { name, department id }
-        
-        departments = rows.map(row => {
-            return `${row["department id"]}. ${row.name}`;
-        });
-        db.promise().query(queryRoles)
-        .then(([rows,fields]) => {
-            console.log(cTable.getTable(rows));
-            console.log(`Above is the list of current roles.\n`);
-
-            //Inquire the add role questions
-            inquirer.prompt(
-                newRoleQs(departments)
-            )
-            .then(roleOb => {
-                const depId = parseInt(roleOb.role_dep_id.split(".")[0]);
-                const roleParams = [roleOb.role_name,depId,roleOb.role_salary];
-                let roleName = roleParams[0];
-                
-                //Add the role
-                db.promise().query(addRoleQuery,roleParams)
-                .then(([rows,fields]) => {
-                    console.log(`\nThe role '${roleName}' has been added.`);
-                    inquirer.prompt([backToStart])
-                    .then(userChoice => {
-                        if(userChoice.back_to_start) {
-                            runProgram();
-                        } else {
-                            console.log('\nHave a nice day!');
-                            process.exit();
-                        }
+        //Check to see if any department exists first
+        if(rows.length === 0) {
+            console.log(`\nThere are no departments yet!  Please add a department first before creating a role.\n`);
+            inquirer.prompt([backToStart])
+            .then(userChoice => {
+                if(userChoice.back_to_start) {
+                    runProgram();
+                } else {
+                    console.log('\nHave a nice day!');
+                    process.exit();
+                }
+            })
+            .catch(err => {
+                console.log(err);
+            });
+        } else {
+            departments = rows.map(row => {
+                return `${row["department id"]}. ${row.name}`;
+            });
+            db.promise().query(queryRoles)
+            .then(([rows,fields]) => {
+                console.log(cTable.getTable(rows));
+                console.log(`Above is the list of current roles.\n`);
+    
+                //Inquire the add role questions
+                inquirer.prompt(
+                    newRoleQs(departments)
+                )
+                .then(roleOb => {
+                    const depId = parseInt(roleOb.role_dep_id.split(".")[0]);
+                    const roleParams = [roleOb.role_name,depId,roleOb.role_salary];
+                    let roleName = roleParams[0];
+                    
+                    //Add the role
+                    db.promise().query(addRoleQuery,roleParams)
+                    .then(([rows,fields]) => {
+                        console.log(`\nThe role '${roleName}' has been added.`);
+                        inquirer.prompt([backToStart])
+                        .then(userChoice => {
+                            if(userChoice.back_to_start) {
+                                runProgram();
+                            } else {
+                                console.log('\nHave a nice day!');
+                                process.exit();
+                            }
+                        })
+                        .catch(err => {
+                            console.log(err);
+                        });
                     })
                     .catch(err => {
                         console.log(err);
@@ -169,10 +188,7 @@ function addNewRole() {
             .catch(err => {
                 console.log(err);
             });
-        })
-        .catch(err => {
-            console.log(err);
-        });
+        }
     })
     .catch(err => {
         console.log(err);
@@ -181,77 +197,105 @@ function addNewRole() {
 
 function addNewEmployee() {
     let managersArr, rolesArr;
-    db.promise().query(dropManagersTable)
-    .then(() => {
-        db.promise().query(populateManagers)
-        .then(() => {
-            db.promise().query(`SELECT * FROM managers`)
-            .then(([rows,fields]) => {
-                //Get the managers from the temporary managers table
-                managersArr = rows;
-                db.promise().query(`SELECT role.id, role.title FROM role`)
-                .then(([rows,fields]) => {
-                    rolesArr = rows;
-                    //Show current list of employees
-                    db.promise().query(identifyManagers)
+    //Check to see if any roles exist before adding employee
+    db.promise().query("SELECT * FROM role")
+    .then(([rows,fields]) => {
+        //Do any roles exist yet?
+        if(rows.length === 0) {
+            console.log(`\nThere are no roles (and maybe no departments) yet.  Please make sure at least one role exists before adding an employee.\n`);
+            //Ask if the user wants to perform another action or quit.
+            inquirer.prompt([backToStart])
+            .then(userChoice => {
+                if(userChoice.back_to_start) {
+                    runProgram();
+                } else {
+                    console.log('\nHave a nice day!');
+                    process.exit();
+                }
+            })
+            .catch(err => {
+                console.log(err);
+            });
+        } else {
+            db.promise().query(dropManagersTable)
+            .then(() => {
+                db.promise().query(populateManagers)
+                .then(() => {
+                    db.promise().query(`SELECT * FROM managers`)
                     .then(([rows,fields]) => {
-                        console.log(cTable.getTable(rows));
-
-                        //Create arrays to handle role choices and manager choices
-                        let roleChoices = rolesArr.map(roleOb => {
-                            return `${roleOb.id}. ${roleOb.title}`;
-                        });
-                        let managerChoices = managersArr.map(managerOb => {
-                            return `${managerOb.employee_id}. ${managerOb.first_name} ${managerOb.last_name}`;
-                        });
-                        managerChoices.push("None");
-
-                        //Questions for inquirer
-                        let emp_questions = [emp_fn,emp_ln,assignRole(roleChoices),qList("emp_man","Please assign this employee a manager from the list below.  If the employee has no manager, please select 'None' (located at the end).",managerChoices)];
-
-                        inquirer.prompt(
-                            emp_questions
-                        )
-                        .then(emp_data => {
-                            //console.log(emp_data);
-                            //Grab the id number assigned to the particular role
-                            let roleId = parseInt(emp_data.emp_role.split(".")[0]);
-
-                            //Grab the employee id number assigned to the manager or null
-                            let managerId = emp_data.emp_man === "None" ? null : parseInt(emp_data.emp_man.split(".")[0]);
-
-                            //Add employee to database
-                            db.query(`INSERT INTO employee (first_name,last_name,role_id,manager_id) VALUES (?,?,?,?)`, [emp_data.emp_fn,emp_data.emp_ln,roleId,managerId], (err, result) => {
-                                if(err) {
-                                    console.log(err);
-                                }
-                                console.log(`\n${emp_data.emp_fn} ${emp_data.emp_ln} was added successfully!\n`);
-                                //Drop the managers table
-                                db.promise().query(dropManagersTable)
-                                .then(() => {
-                                    //Drop the managers table
-                                    db.promise().query(dropManagersTable)
-                                    .then(() => {
-
-                                        //Ask if the user wants to perform another action or quit.
-                                        inquirer.prompt([backToStart])
-                                        .then(userChoice => {
-                                            if(userChoice.back_to_start) {
-                                                runProgram();
-                                            } else {
-                                                console.log('\nHave a nice day!');
-                                                process.exit();
-                                            }
-                                        });
-                                    })
-                                    .catch(err => {
-                                        console.log(err);
-                                    });
-                                })
-                                .catch(err => {
-                                    console.log(err);
+                        //Get the managers from the temporary managers table
+                        managersArr = rows;
+                        db.promise().query(`SELECT role.id, role.title FROM role`)
+                        .then(([rows,fields]) => {
+                            rolesArr = rows;
+                            //Show current list of employees
+                            db.promise().query(identifyManagers)
+                            .then(([rows,fields]) => {
+                                console.log(cTable.getTable(rows));
+        
+                                //Create arrays to handle role choices and manager choices
+                                let roleChoices = rolesArr.map(roleOb => {
+                                    return `${roleOb.id}. ${roleOb.title}`;
                                 });
+                                let managerChoices = managersArr.map(managerOb => {
+                                    return `${managerOb.employee_id}. ${managerOb.first_name} ${managerOb.last_name}`;
+                                });
+                                managerChoices.push("None");
+        
+                                //Questions for inquirer
+                                let emp_questions = [emp_fn,emp_ln,assignRole(roleChoices),qList("emp_man","Please assign this employee a manager from the list below.  If the employee has no manager, please select 'None' (located at the end).",managerChoices)];
+        
+                                inquirer.prompt(
+                                    emp_questions
+                                )
+                                .then(emp_data => {
+                                    //console.log(emp_data);
+                                    //Grab the id number assigned to the particular role
+                                    let roleId = parseInt(emp_data.emp_role.split(".")[0]);
+        
+                                    //Grab the employee id number assigned to the manager or null
+                                    let managerId = emp_data.emp_man === "None" ? null : parseInt(emp_data.emp_man.split(".")[0]);
+        
+                                    //Add employee to database
+                                    db.query(`INSERT INTO employee (first_name,last_name,role_id,manager_id) VALUES (?,?,?,?)`, [emp_data.emp_fn,emp_data.emp_ln,roleId,managerId], (err, result) => {
+                                        if(err) {
+                                            console.log(err);
+                                        }
+                                        console.log(`\n${emp_data.emp_fn} ${emp_data.emp_ln} was added successfully!\n`);
+                                        //Drop the managers table
+                                        db.promise().query(dropManagersTable)
+                                        .then(() => {
+                                            //Drop the managers table
+                                            db.promise().query(dropManagersTable)
+                                            .then(() => {
+        
+                                                //Ask if the user wants to perform another action or quit.
+                                                inquirer.prompt([backToStart])
+                                                .then(userChoice => {
+                                                    if(userChoice.back_to_start) {
+                                                        runProgram();
+                                                    } else {
+                                                        console.log('\nHave a nice day!');
+                                                        process.exit();
+                                                    }
+                                                });
+                                            })
+                                            .catch(err => {
+                                                console.log(err);
+                                            });
+                                        })
+                                        .catch(err => {
+                                            console.log(err);
+                                        });
+                                    });
+                                });
+                            })
+                            .catch(err => {
+                                console.log(err);
                             });
+                        })
+                        .catch(err => {
+                            console.log(err);
                         });
                     })
                     .catch(err => {
@@ -265,10 +309,7 @@ function addNewEmployee() {
             .catch(err => {
                 console.log(err);
             });
-        })
-        .catch(err => {
-            console.log(err);
-        });
+        }
     })
     .catch(err => {
         console.log(err);
