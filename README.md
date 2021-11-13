@@ -1,6 +1,8 @@
 # Manage Employees
 
 ![Initial Menu](./assets/images/employee-manager1.jpg)
+
+[Demonstration Video](https://watch.screencastify.com/v/ZhFBupc1BcSLXjC87X72)
   
   ## Description
   This application, once set up, will allow the user to manage certain details about a work organization.  The user will be able to create department, role, and employee data.  The user will also be able to assign and update managers and roles of those employees.
@@ -20,7 +22,7 @@
   
   ## Usage
   
-  Once the required files and node packages are in place, the user should run the command 'npm start' from the command line in the root directory.  From here, just answer the prompted questions.
+  The databases and the table schema have already been created.  From the root folder, the user should enter the mysql program and then type these two commands in this order: source 'db/db.sql;' and 'db/schema.sql'.  This will create the database and populate it with the necessary tables.  Once the required files and node packages are in place, the user should run the command 'npm start' from the command line in the root directory.  From here, just answer the prompted questions.
   
   ## License
   

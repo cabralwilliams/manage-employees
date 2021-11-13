@@ -401,7 +401,7 @@ function updateManager() {
     db.promise().query("SELECT * FROM employee")
     .then(([rows,fields]) => {
         if(rows.length === 0) {
-            console.log(`\nThere are no employees whose roles can be changed yet.\n`);
+            console.log(`\nThere are no employees whose manager can be changed yet.\n`);
             //Ask if the user wants to perform another action or quit.
             inquirer.prompt([backToStart])
             .then(userChoice => {
@@ -548,7 +548,7 @@ function employeesByManager() {
     db.promise().query("SELECT * FROM employee")
     .then(([rows,fields]) => {
         if(rows.length === 0) {
-            console.log(`\nThere are no employees whose roles can be changed yet.\n`);
+            console.log(`\nThere are no employees yet and thus no managers.\n`);
             //Ask if the user wants to perform another action or quit.
             inquirer.prompt([backToStart])
             .then(userChoice => {
@@ -649,7 +649,7 @@ function employeesByDepartment() {
     db.promise().query(`SELECT * from role`)
     .then(([rows,fields]) => {
         if(rows.length === 0) {
-            console.log(`\nThere are no roles to place in departments!\n`);
+            console.log(`\nThere are no roles (or employees) to place in departments!\n`);
             //Inquire about another action or quit
             inquirer.prompt([
                 backToStart
