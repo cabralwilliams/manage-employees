@@ -22,7 +22,7 @@
   
   ## Usage
   
-  The databases and the table schema have already been created.  From the root folder, the user should enter the mysql program and then type these two commands in this order: source 'db/db.sql;' and 'db/schema.sql'.  This will create the database and populate it with the necessary tables.  Once the required files and node packages are in place, the user should run the command 'npm start' from the command line in the root directory.  From here, just answer the prompted questions.
+  The databases and the table schema have already been created.  From the root folder, the user should enter the mysql program and then type these two commands in this order: source 'db/db.sql;' and 'db/schema.sql'.   This will create the database and populate it with the necessary tables.  (In the program as it exists now, I am using 'root' as the username and my mysql password for that username.  I installed the 'dotenv' package and include a .env file in the root of the project.  The .env file does not carry over to GitHub.  If you wish to use the same connection setup as I have, you will have to install dotenv and include the statment "require('dotenv').config()" in the src/cconnection.js file.  Then, you will have to create the .env file, placing a line of code saying mysql_PW=SOME_PASSWORD_STRING.  Alternatively, you can just hardcode your password in place of the process.env.mysql_PW line in connection.js.) Once the required files and node packages are in place, the user should run the command 'npm start' from the command line in the root directory.  From here, just answer the prompted questions.
   
   ## License
   
